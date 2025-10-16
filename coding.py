@@ -1,3 +1,6 @@
+import re
+import ast
+from typing import Dict, Optional, Tuple
 from llms import llm_client
 from model import intention_client_manager
 
@@ -14,6 +17,31 @@ def generate_llm_response(intention: str, format_params: dict):
         temperature=temperature,
         max_tokens=max_tokens,
     )
+
+
+def _check_python_code(response_text: str) -> tuple:
+    """
+    提取回答中的Python代码并检查语法错误
+    """
+    # 1. 提取用```python ```包裹的代码块
+    code_pattern = re.compile(r'```python(.*?)```', re.DOTALL)
+    match = code_pattern.search(response_text)
+
+    extracted_code = None
+    if match:
+        extracted_code = match.group(1).strip()
+
+    # 2. 检查语法错误
+    syntax_error = ""
+    if extracted_code:
+        try:
+            # 使用ast模块解析代码，若有语法错误会抛出SyntaxError
+            ast.parse(extracted_code)
+        except SyntaxError as e:
+            # 格式化错误信息（包含错误位置和原因）
+            syntax_error = f"Syntax error at line {e.lineno}, column {e.offset}: {e.msg}"
+
+    return extracted_code, syntax_error
 
 
 def coding_with_question(label, question, FHIR_FSH):
@@ -74,88 +102,27 @@ def coding_with_question(label, question, FHIR_FSH):
     print(f"------------------step_5_reason---------------")
     print(step_5_response)
 
-    return step_5_response
+    target_code, check = _check_python_code(step_5_response)
+    if not check:
+        return target_code
+    raise TypeError("The target code is not correct python!")
 
 
 if __name__ == "__main__":
-    test_label = "Therapy or Surgery"
-    test_question = "2. 肛门手术患者;"
-    test_FHIR_FSH = '''
-        // 1. ICD-O-3肛门部位值集
-        ValueSet: CNWQK75_AnusBodyLocationVS
-        Id: cnwqk75-anus-body-location-vs
-        Title: "肛门部位解剖位置值集"
-        Description: "基于ICD-O-3的肛门部位编码值集"
-        * ^url = "http://localhost:3456/api/terminology/ValueSet/cnwqk75-anus-body-location-vs"
-        * include codes from system http://localhost:3456/api/terminology/CodeSystem/icdo3 where concept regex /C21\.[0-8]/
-        
-        // 2. ICD-10肛门疾病值集
-        ValueSet: CNWQK75_AnusDiseaseVS
-        Id: cnwqk75-anus-disease-vs
-        Title: "肛门疾病诊断值集"
-        Description: "基于ICD-10的肛门疾病编码值集"
-        * ^url = "http://localhost:3456/api/terminology/ValueSet/cnwqk75-anus-disease-vs"
-        * include codes from system http://localhost:3456/api/terminology/CodeSystem/icd10 where concept regex /K62\.[0-9]|C21\.[0-9]|K62\.5/
-        
-        // 3. 自定义肛门手术操作编码系统
-        CodeSystem: CNWQK75_AnusSurgeryCS
-        Id: cnwqk75-anus-surgery-cs
-        Title: "肛门手术操作编码系统"
-        Description: "自定义肛门手术操作编码系统"
-        * ^url = "http://localhost:3456/api/terminology/CodeSystem/cnwqk75-anus-surgery-cs"
-        * ^caseSensitive = true
-        * #ANS001 "肛门瘘管切除术" "痔疮手术"
-        * #ANS002 "肛门成形术"
-        * #ANS003 "肛门括约肌切开术"
-        * #ANS004 "痔切除术" "痔疮手术"
-        * #ANS005 "肛门脓肿引流术"
-        
-        // 4. 自定义肛门手术值集
-        ValueSet: CNWQK75_AnusSurgeryVS
-        Id: cnwqk75-anus-surgery-vs
-        Title: "肛门手术操作值集"
-        Description: "包含所有肛门手术操作编码的值集"
-        * ^url = "http://localhost:3456/api/terminology/ValueSet/cnwqk75-anus-surgery-vs"
-        * include codes from system CNWQK75_AnusSurgeryCS
-        
-        // 5. 肛门手术患者Profile（修复语法错误）
-        Profile: CNWQK75_AnusSurgeryPatient
-        Parent: Procedure
-        Id: cnwqk75-anus-surgery-patient
-        Title: "肛门手术患者规范"
-        Description: "定义接受肛门手术的患者资源规范"
-        * ^url = "http://localhost:3456/api/terminology/Profile/cnwqk75-anus-surgery-patient"
-        * status 1..1
-        * code from CNWQK75_AnusSurgeryVS (required)
-        * bodySite from CNWQK75_AnusBodyLocationVS (required)
-        * subject 1..1
-        * performed[x] 1..1
-        * reasonCode from CNWQK75_AnusDiseaseVS
-        * note 0..* MS
-        
-        // 6. 肛门疾病患者Profile
-        Profile: CNWQK75_AnusDiseasePatient
-        Parent: Condition
-        Id: cnwqk75-anus-disease-patient
-        Title: "肛门疾病患者规范"
-        Description: "定义肛门疾病患者的诊断资源规范"
-        * ^url = "http://localhost:3456/api/terminology/Profile/cnwqk75-anus-disease-patient"
-        * clinicalStatus 1..1
-        * code from CNWQK75_AnusDiseaseVS (required)
-        * subject 1..1
-        * onset[x] 0..1
-        * note 0..* MS
-        
-        // 7. 临床注释规范
-        Profile: CNWQK75_ClinicalNote
-        Parent: Annotation
-        Id: cnwqk75-clinical-note
-        Title: "临床注释规范"
-        Description: "定义临床文本注释的规范"
-        * ^url = "http://localhost:3456/api/terminology/Profile/cnwqk75-clinical-note"
-        * text 1..1
-        * time 0..1
-        * author[x] 0..1
-    '''
+    import json
+    from utils import extract_excel_data
+    meta = extract_excel_data(r"E:\xidian\比赛\CHIP2025-医学NLP代码\A榜数据\test A.xlsx")
 
-    result = coding_with_question(test_label, test_question, test_FHIR_FSH)
+    result = []
+    for _id, label, question, deepquery_id, fhir_fsh in meta:
+        code = coding_with_question(label, question, fhir_fsh)
+        _result = {
+            "id": _id,
+            "deepquery_id": deepquery_id,
+            "code": code
+        }
+        result.append(_result)
+
+    with open("./output.jsonl", "w", encoding="utf-8") as f:
+        for result in result:
+            f.write(json.dumps(result) + "\n")
