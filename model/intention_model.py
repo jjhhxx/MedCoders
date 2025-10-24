@@ -16,11 +16,21 @@ class IntentionClientManager:
         # See utils.prompt_conf for details.
         mapping = {
             "coding": {
-                "extract_input_information": self.prompt_conf.step_1_extract_input_information,
-                "define_rule": self.prompt_conf.step_2_define_rule,
-                "class_init": self.prompt_conf.step_3_class_init,
-                "class_core_code": self.prompt_conf.step_4_class_core_code,
-                "class_complete": self.prompt_conf.step_5_class_complete,
+                "step_1_extract_FHIR": self.prompt_conf.step_1_extract_FHIR,
+                "step_2_online_search": self.prompt_conf.step_2_online_search,
+                "step_3_generate": self.prompt_conf.step_3_generate,
+            }
+        }
+        return mapping
+
+    @property
+    def intentions_prompt_params_mapping_k2p(self):
+        # See utils.prompt_conf for details.
+        mapping = {
+            "coding": {
+                "step_1_extract_FHIR": self.prompt_conf.step_1_params,
+                "step_2_online_search": self.prompt_conf.step_2_params,
+                "step_3_generate": self.prompt_conf.step_3_params,
             }
         }
         return mapping
@@ -29,21 +39,14 @@ class IntentionClientManager:
     def intentions_mapping_check_function(self):
         mapping = {
             "coding": {
-                "extract_input_information": partial(
-                    self._check_before, check_keys=["question_core_obj", "FHIR_configuration", "extract_fields4text"],
+                "step_1_extract_FHIR": partial(
+                    self._check_before, check_keys=["valueSets", "codeSystems", "profiles"],
                     check_key_func=self._check_key_for_dict
                 ),
-                "define_rule": partial(
-                    self._check_before, check_keys=["correlation_judgment_rule", "extraction_rules", "neg_logic_rule"],
-                    check_key_func=self._check_key_for_dict
-                ),
-                "class_init": partial(
+                "step_2_online_search": partial(
                     self._check_before, check_keys=[], check_key_func=None
                 ),
-                "class_core_code": partial(
-                    self._check_before, check_keys=[], check_key_func=None
-                ),
-                "class_complete": partial(
+                "step_3_generate": partial(
                     self._check_before, check_keys=[], check_key_func=None
                 ),
             }
@@ -54,11 +57,9 @@ class IntentionClientManager:
     def intentions_request_params_mapping_k2p(self):
         mapping = {
             "coding": {
-                "extract_input_information": (0.7, 16384),
-                "define_rule": (0.7, 16384),
-                "class_init": (0.2, 16384),
-                "class_core_code": (0.2, 16384),
-                "class_complete": (0.2, 16384),
+                "step_1_extract_FHIR": (0.7, 32768),
+                "step_2_online_search": (0.7, 32768),
+                "step_3_generate": (0.7, 32768),
             }
         }
         return mapping
@@ -104,6 +105,11 @@ class IntentionClientManager:
     def get_intention_prompt_by_intention(self, intention_recognition: str) -> str:
         title, specific = intention_recognition.split("-")
         intention_prompt = self.intentions_prompt_mapping_k2p.get(title).get(specific)
+        return intention_prompt
+
+    def get_intention_prompt_params_by_intention(self, intention_recognition: str) -> str:
+        title, specific = intention_recognition.split("-")
+        intention_prompt = self.intentions_prompt_params_mapping_k2p.get(title).get(specific)
         return intention_prompt
 
     def get_check_function_by_intention(self, intention_recognition: str) -> callable:

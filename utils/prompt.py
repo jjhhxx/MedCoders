@@ -1,495 +1,1176 @@
 
 prompt_conf = {
-    "step_1_extract_input_information":
+    "step_1_extract_FHIR":
         '''
-        任务1：输入信息解析与核心要素提取
-        目标：从label、question、FHIR_FSH中提取生成Python代码需用到的核心要素，包括「临床问题核心对象」「FHIR配置信息」「待提取字段」。
-        输入格式：
-        - label：{{问题类型，如“临床病史提取”}}
-        - question：{{用户关注的临床问题，如“提取患者吸烟史信息”}}
-        - FHIR_FSH：{{FHIR Shorthand代码，定义Observation资源的Profile、CodeSystem}}
-        
-        输出格式：
-        {{
-            "result":{{
-                "question_core_obj": "提取的临床问题主体（如“吸烟史”）",
-                "FHIR_configuration": {{
-                    "observation_profile_url": "FHIR_FSH中定义的Observation Profile URL",
-                    "main_code_system": "FHIR_FSH中定义的主CodeSystem URL",
-                    "main_code": "FHIR_FSH中对应临床问题的主Code（如“tobacco-use”）",
-                    "main_code_display": "主Code的显示名（如“烟草使用史”）",
-                    "component_codes": [
-                      {{
-                        "code": "FHIR_FSH中定义的组件Code（如“tobacco-use-status”）",
-                        "display": "组件显示名（如“吸烟史状态”）",
-                        "value_type": "组件值类型（如“CodeableConcept”“Quantity”）"
-                      }}
-                    ]
-                }},
-                "extract_fields4text": ["从病例中需提取的字段（如“有无吸烟史”“吸烟年限”“每日吸烟量”）"]          # 待提取字段
-            }}
-        }}
-        
-        Few-shot示例：
-        输入：
-        - label：临床病史提取
-        - question：提取患者饮酒史信息
-        - FHIR_FSH：
-          Profile: AlcoholConsumptionObservation
-          Parent: Observation
-          Id: cnwqk435-alcohol-consumption
-          Title: "酒精消费观察"
-          * meta.profile = "http://localhost:3456/api/terminology/Profile/cnwqk435-alcohol-consumption"
-          * code.coding[0] = http://localhost:3456/api/terminology/CodeSystem/cnwqk435-observation-cs#alcohol-consumption "酒精消费"
-          * component[0].code = http://localhost:3456/api/terminology/CodeSystem/cnwqk435-component-cs#drinking-history-status "饮酒史状态"
-          * component[0].value[x] = CodeableConcept
-          * component[1].code = http://localhost:3456/api/terminology/CodeSystem/cnwqk435-component-cs#duration-of-drinking "饮酒持续时间"
-          * component[1].value[x] = Quantity
-        
-        输出：
-            {{
-                "result": {{
-                    "question_core_obj": "饮酒史",      # 临床问题核心对象
-                    "FHIR_configuration": {{          # FHIR配置信息
-                        "observation_profile_url": "http://localhost:3456/api/terminology/Profile/cnwqk435-alcohol-consumption",
-                        "main_code_system": "http://localhost:3456/api/terminology/CodeSystem/cnwqk435-observation-cs",
-                        "main_code": "alcohol-consumption",
-                        "main_code_display": "酒精消费",
-                        "component_codes": [
-                          {{
-                            "code": "drinking-history-status",
-                            "display": "饮酒史状态",
-                            "value_type": "CodeableConcept"
-                          }},
-                          {{
-                            "code": "duration-of-drinking",
-                            "display": "饮酒持续时间",
-                            "value_type": "Quantity"
-                          }}
-                        ]
-                    }},
-                    "extract_fields4text": ["有无饮酒史", "饮酒持续时间", "每日酒精摄入量", "酒类类型"]
-                }}
-            }}
-        
-        请基于以下输入完成本任务：
-        - label：{label}
-        - question：{question}
-        - FHIR_FSH：{FHIR_FSH}
+        请你处理以下 FHIR 规范代码文本，严格按照要求完成资源提取并输出 JSON 格式结果，具体任务与规则如下：
+        一、任务目标
+        从输入的 FHIR 规范代码中，精准提取三类核心资源：1. 所有 ValueSet（值集）；2. 所有 CodeSystem（代码系统）；3. 所有 Profile（资源规范），并将三类资源分别整理为 JSON 数组。
+        二、资源识别与提取规则
+        1. ValueSet 提取规则
+        识别标识：以 “ValueSet:” 开头的资源，包含以下必填字段，需全部提取：
+        id：对应代码中 “Id:” 后的内容（如 “cnwqk75-anus-body-location-vs”）
+        title：对应代码中 “Title:” 后的内容（需保留英文引号内的完整文本）
+        description：对应代码中 “Description:” 后的内容（需保留英文引号内的完整文本）
+        url：对应代码中 “* ^url =” 后的内容（需保留英文引号内的完整文本）
+        include：对应代码中 “* include codes from system” 后的内容，需提取 “system” 值（引号内的 URL）和 “where concept regex” 后的筛选条件（如 “/C21.[0-8]/”），无筛选条件则仅保留 system 值
+        2. CodeSystem 提取规则
+        识别标识：以 “CodeSystem:” 开头的资源，包含以下必填字段，需全部提取：
+        id：对应代码中 “Id:” 后的内容
+        title：对应代码中 “Title:” 后的内容（需保留英文引号内的完整文本）
+        description：对应代码中 “Description:” 后的内容（需保留英文引号内的完整文本）
+        url：对应代码中 “* ^url =” 后的内容（需保留英文引号内的完整文本）
+        codes：提取所有以 “* #” 开头的代码项，每个代码项需包含：
+        code：“#” 后的代码（如 “ANS001”）
+        display：第一个英文引号内的描述（如 “肛门瘘管切除术”）
+        additionalDisplay：第二个英文引号内的附加描述（如有，如 “痔疮手术”；无则不填）
+        3. Profile 提取规则
+        识别标识：以 “Profile:” 开头的资源，包含以下必填字段，需全部提取：
+        id：对应代码中 “Id:” 后的内容
+        parent：对应代码中 “Parent:” 后的资源类型（如 “Procedure”“Condition”“Annotation”）
+        title：对应代码中 “Title:” 后的内容（需保留英文引号内的完整文本）
+        description：对应代码中 “Description:” 后的内容（需保留英文引号内的完整文本）
+        url：对应代码中 “* ^url =” 后的内容（需保留英文引号内的完整文本）
+        elements：提取所有以 “*” 开头的元素约束项（排除 “* ^url = ”），每个元素项需包含：
+        path：元素名称（如 “status”“code”“bodySite”）
+        constraint：元素后的约束内容（如 “1..1”“from CNWQK75_AnusSurgeryVS (required)”“MS”，需完整保留）
+        三、输出格式要求
+        整体输出为 JSON 对象，包含三个顶级数组字段：valueSets（存储所有 ValueSet）、codeSystems（存储所有 CodeSystem）、profiles（存储所有 Profile）。
+        数组内每个对象需严格对应上述提取规则的字段，字段名使用小驼峰命名（如additionalDisplay），无对应内容的可选字段可省略或设为 null。
+        保留原始代码中的特殊字符（如正则表达式中的反斜杠 “\”、英文引号），确保提取内容与原代码一致。
+        示例 JSON 结构（仅展示框架，需替换为实际提取内容）：
+        ```json
+        {
+            "result":
+                {
+                  "valueSets": [
+                    {
+                      "id": "xxx",
+                      "title": "xxx",
+                      "description": "xxx",
+                      "url": "xxx",
+                      "include": {
+                        "system": "xxx",
+                        "regexFilter": "xxx"
+                      }
+                    }
+                  ],
+                  "codeSystems": [
+                    {
+                      "id": "xxx",
+                      "title": "xxx",
+                      "description": "xxx",
+                      "url": "xxx",
+                      "codes": [
+                        {
+                          "code": "xxx",
+                          "display": "xxx",
+                          "additionalDisplay": "xxx"  # 不存在置为空字符串，不要输出null
+                        }
+                      ]
+                    }
+                  ],
+                  "profiles": [
+                    {
+                      "id": "xxx",
+                      "parent": "xxx",
+                      "title": "xxx",
+                      "description": "xxx",
+                      "url": "xxx", # 不存在置为空字符串，不要输出null
+                      "elements": [
+                        {
+                          "path": "xxx",
+                          "constraint": "xxx"
+                        }
+                      ]
+                    }
+                  ]
+                }
+            }
+        ```
+        四、处理要求
+        仅处理输入的 FHIR 规范代码文本，不额外添加或删减资源，确保提取的资源数量与原代码一致。
+        若字段内容存在英文引号，需完整保留（如 Title 值包含引号内的所有文字）。
+        严格按照上述规则与 JSON 格式输出，避免格式错误（如逗号遗漏、引号不匹配）。
+        请你基于上述规则，对输入的 FHIR 规范代码文本进行处理，输出最终的 JSON 结果。
         ''',
 
-    "step_2_define_rule":
+    "step_1_params":
         '''
-        任务2：临床文本提取规则设计
-        目标：针对子任务1提取的“临床问题核心对象”和“待提取字段”，设计3类规则：① 相关性判断规则（判断病例是否含该临床问题）；② 字段提取规则（提取待提取字段的关键词/正则）；③ 否定逻辑规则（避免误判否定表述）。
-        输入：子任务1的输出结果（临床问题核心对象、待提取字段）
+        ------------------输入的label如下所示：-------------------
+        {label}
+        ------------------输入的question如下所示：----------------
+        {question}
+        ------------------输入的FHIR如下所示：--------------------
+        {FHIR_FSH}
+        ---------请输出（请勿输出python无法解析的字段内容）:----------
+        ''',
+
+    "step_2_online_search":
+        '''
+        请你调用在线搜索功能，基于我提供的 FHIR ValueSet 信息（id：{输入的 id}，title：{输入的 title}，description：{输入的 description}），帮我检索并返回该 ValueSet 的详细有效信息。具体需包含：
+        该 ValueSet 包含的核心概念（如吸烟状态的具体分类，如 “从不吸烟”“目前吸烟” 等）；
+        各概念对应的标准化编码（如 SNOMED CT、HL7 v2 等编码系统中的具体代码）；
+        信息来源（如官方 FHIR 文档、对应编码系统的官网链接或权威医学术语库）；
+        若存在本地化扩展（如特定地区的补充概念或编码），也请一并补充。
+        请确保信息准确且为最新版本，若检索到多个来源的信息，需说明差异并优先选择权威来源。
+        请注意，你仅需要返回相应的关键信息即可。
+        ''',
+
+    "step_2_params":
+        '''
+        ------------------输入的FHIR ValueSet如下所示：--------------------
+        {FHIR_ValueSet}
+        -----------------------请输出相关的有效信息-------------------------
+        ''',
+
+    "step_3_generate":
+        """
+        System Prompt（系统角色）
+        你是一名精通 HL7 FHIR R4 标准与 Python 编程的医疗AI工程师。  
+        你的任务是根据输入的 FHIR extract（FHIR结构定义JSON），自动生成一段完整的 Python 代码。  
+        该代码需能从中文临床文本中提取信息，并生成符合该 extract 所定义的 FHIR Bundle。  
         
-        输出格式：
-        {{
-            "result": {{
-              "correlation_judgment_rule": {{
-                "核心关键词列表": ["判断病例是否含该临床问题的正向关键词（如“吸烟”“烟史”“卷烟”）"],
-                "判断逻辑": "若病例文本包含任一核心关键词，则判定为“与临床问题相关”，进入后续提取；否则跳过"
-              }},
-              "extraction_rules": [
-                {{
-                  "字段名": "待提取字段（如“有无吸烟史”）",
-                  "提取方式": "关键词匹配/正则匹配",
-                  "具体规则": ["关键词列表（如“有吸烟史”“否认吸烟”）" / "正则模式（如r'吸烟[已约有]?(\d+)年'）"]
-                }}
-              ],
-              "neg_logic_rule": {{
-                "否定关键词列表": ["表示否定该临床问题的词（如“无”“不”“戒”“否认”）"],
-                "否定模式列表": ["固定否定表述（如“无吸烟史”“已戒烟”）"],
-                "否定判断逻辑": "若病例含否定模式，或否定关键词与核心关键词距离≤5个字符（避免误判无关否定），则判定为“无该临床问题史”"
-              }}
-            }}
-        }}
+        代码必须满足以下要求：
+        ## 一、类设计要求
+        1. **主类：**
+           - 名称：`FHIRResourceBundleGenerator`
+           - 初始化方法：`__init__(self, fhir_api_base: str)`
+           - 主方法：
+             ```python
+             def parse_clinical_text_to_fhir_bundle(self, patient_id: str, case_reports: list[str], ai_algorithm_type="nlp") -> dict:
+             ```
+           - 可包含辅助方法，如：
+             - `_extract_entities`（文本实体抽取）
+             - `_check_negation`（否定检测）
+             - `_determine_status`（状态推断）
+             - `_create_observation_resource`
+             - `_create_condition_resource`
+             - `_create_procedure_resource`
+             - `_create_medication_resource`
+             - `_create_immunization_resource`
         
-        Few-shot示例：
-        输入：子任务1输出中“临床问题核心对象=饮酒史，待提取字段=[有无饮酒史，饮酒持续时间，每日酒精摄入量，酒类类型]”
+        2. **Bundle输出结构：**
+           ```python
+           {
+               "resourceType": "Bundle",
+               "type": "transaction",
+               "total": len(entries),
+               "entry": entries
+           }
         
-        输出：
-        {{
-            "result": {{
-                "correlation_judgment_rule": {{        # 1. 相关性判断规则
-                    "核心关键词列表": ["饮酒", "喝酒", "酒精", "酒", "酗酒", "嗜酒", "白酒", "啤酒", "葡萄酒"],
-                    "判断逻辑": "若病例文本包含任一核心关键词，则判定为“与饮酒史相关”，进入后续提取；否则跳过"
-                }},
-                "extraction_rules": [       # 2. 待提取字段提取规则
-                {{
-                  "字段名": "有无饮酒史",
-                  "提取方式": "关键词匹配+否定逻辑",
-                  "具体规则": ["正向关键词：有饮酒史、饮酒多年；否定关键词：无饮酒史、不饮酒、戒酒"]
-                }},
-                {{
-                  "字段名": "饮酒持续时间",
-                  "提取方式": "正则匹配",
-                  "具体规则": ["r'饮酒[已约有]?(\d+)年'，r'喝酒[已约有]?(\d+)余年'，r'饮酒≥(\d+)年'"]
-                }},
-                {{
-                  "字段名": "每日酒精摄入量",
-                  "提取方式": "正则匹配",
-                  "具体规则": ["r'每日饮酒(\d+)(两|杯|ml)'，r'饮酒量(\d+)(g|克)/天'"]
-                }},
-                {{
-                  "字段名": "酒类类型",
-                  "提取方式": "关键词匹配",
-                  "具体规则": ["白酒", "啤酒", "葡萄酒", "红酒", "黄酒", "洋酒"]
-                }}
+        二、多 Profile 处理逻辑
+        1. 模型需自动识别 extract["profiles"] 数组中包含的各个 profile。
+        2. 对每个 profile：
+            - 读取其 "parent"（如 "Observation", "Condition", "Procedure"）
+            - 生成相应的资源构建函数 _create_<parent>_resource()
+            - 使用该 profile 的 id、url、elements 约束填充字段。
+        3. 所有生成的 _create_<parent>_resource() 方法需自动注册到：
+        self.profile_builders = {
+            "Observation": self._create_observation_resource,
+            "Condition": self._create_condition_resource,
+            "Procedure": self._create_procedure_resource,
+            "MedicationStatement": self._create_medication_resource,
+            "Immunization": self._create_immunization_resource
+        }
+        若 extract 中存在新的 parent 类型，也需动态扩展该映射。
+        4. 主函数 parse_clinical_text_to_fhir_bundle 中逻辑：
+            - 调用 _extract_entities 从 case_reports 中识别医学实体。
+            - 根据实体类别（如症状、疾病、操作等）选择对应的资源构建函数。
+            - 调用 _check_negation 或 _determine_status 进行状态修正。
+            - 将生成的资源追加至 Bundle.entry。
+        
+        三、FHIR映射逻辑要求
+        1. CodeSystem 自动映射生成
+            - 根据 extract["codeSystems"] 动态构建映射字典。
+            - 每个 CodeSystem 的 url 作为 system。
+            - 其 codes 数组中的 display 与 additionalDisplay 作为关键词。
+            - 生成格式如下：
+                MAPPING = {
+                    "关键词": {"system": "<codeSystem.url>", "code": "<code>", "display": "<display>"}
+                }
+            - 所有 codeSystem 映射应存储在 self.mappings 中，按类别索引，如：
+                self.mappings["Disease"], self.mappings["Symptom"], self.mappings["Procedure"]
+        2. ValueSet 约束
+            - 若元素 constraint 中含 “from XXXVS (required)”：
+                - system 字段必须取自对应 ValueSet 的 url。
+                - 若 ValueSet 中存在扩展 codes，应优先匹配 code 或 display。
+        3. Profile 元素字段映射规则
+        每个 profile 的 elements 数组中，包含若干 path/type/constraint。
+        模型生成代码时应严格遵守以下规则：
+            - 使用 path 的最后一级作为字段键名，例如：
+                - "Observation.code" → "code"
+                - "Condition.code" → "code"
+                - "Procedure.bodySite.coding" → 嵌套生成结构。
+            - 若 type 为 "CodeableConcept"，生成：
+                "code": {
+                    "coding": [{
+                        "system": "<system_url>",
+                        "code": "<mapped_code>",
+                        "display": "<mapped_display>"
+                    }]
+                }
+            - 若 type 为 "Reference(Patient)"，生成：
+                "subject": {"reference": f"Patient/{patient_id}"}
+            - 若元素定义了 "1..1" 或 "MS"，则该字段为必填。
+            - 所有生成资源均需包含：
+                "resourceType": "<Profile.parent>",
+                "id": str(uuid.uuid4()),
+                "meta": {"profile": ["<Profile.url>"]}
+        
+        四、常见资源字段要求
+        若 profile.parent 为：
+            - Observation：
+                - 必须包含 status, code, subject, value[x], effectiveDateTime
+            - Condition：
+                - 必须包含 clinicalStatus, code, subject, onsetDateTime
+            - Procedure：
+                - 必须包含 status, code, subject, performedDateTime
+            - MedicationStatement：
+                - 必须包含 status, medicationCodeableConcept, subject, effectiveDateTime
+            - Immunization：
+                - 必须包含 status, vaccineCode, patient, occurrenceDateTime
+        
+        五、否定与状态检测逻辑
+            当 parent 为 "Observation" 且涉及症状类（Symptom、Finding）时，调用 _check_negation 以判断该症状是否否定存在。
+            当 parent 为 "Condition" 或 "Procedure" 时，调用 _determine_status 推断状态（active/completed/resolved）。
+        
+        六、目标
+        模型根据一个 FHIR extract（包含多个 profile/codeSystem/valueSet）
+        → 自动推理出每个 profile 的资源类型与字段
+        → 生成具备多任务提取与 Bundle 构建能力的 Python 代码。
+        举例：
+        如果 extract 中有：
+        profiles: Observation (症状), Condition (疾病), Procedure (手术)
+        codeSystems: 包含症状词典、疾病词典、操作词典
+        则生成的代码应包括：
+        _create_observation_resource()
+        _create_condition_resource()
+        _create_procedure_resource()
+        并在主函数中自动分派生成对应资源。
+        
+        七、FHIR 元素到 Python 字段的映射规则（必须遵循）
+        在生成每个资源构建函数（如 _create_observation_resource）时，必须严格参考 extract.profiles[i].elements 中的字段映射规则：
+        
+        1. 对于 elements 中的每一项：
+           - 使用 `"path"` 作为 FHIR 字段路径，例如 "Observation.code"。
+           - 将点号之后的部分作为 Python 字典的键。
+           - 若字段类型为 "CodeableConcept"，生成格式如下：
+             ```python
+             "code": {
+                 "coding": [{
+                     "system": "<来自对应ValueSet的url或codeSystem的url>",
+                     "code": "<映射得到的code>",
+                     "display": "<映射得到的display>"
+                 }]
+             }
+             ```
+        
+        2. 若元素的 constraint 包含 "from <ValueSetName> (required)"，
+           则 system 字段必须使用该 ValueSet 的 url。
+        
+        3. 若元素的 type 为 "Reference(Patient)"，则：
+           ```python
+           "subject": {
+               "reference": f"Patient/{patient_id}"
+           }
+        
+        若元素的 path 以资源名开头（如 "Observation.valueCodeableConcept"），
+        则该资源字典中应直接包含：
+        "valueCodeableConcept": {
+            "coding": [{
+                "system": "<ValueSet系统URL>",
+                "code": "<匹配code>",
+                "display": "<显示名>"
+            }]
+        }
+        
+        每个生成的资源必须包含以下通用字段：
+        "resourceType": "<Profile.parent>",
+        "id": "<UUID>",
+        "meta": {
+            "profile": ["<Profile.url>"]
+        },
+        "status": "final"  # 若 applicable
+        
+        若 extract.profiles[i] 中存在 "parent": "Observation"，
+        则需包含 Observation 常见字段：status, code, subject, value[x], effectiveDateTime 
+        若 "parent": "Condition"：clinicalStatus, code, subject, onsetDateTime
+        若 "parent": "Procedure"：status, code, subject, performedDateTime, bodySite
+        若 elements.path 包含层级（如 "Procedure.bodySite.coding"），则需递归展开嵌套结构。
+
+        八、示例
+        我将为你提供三组extract和code的示例:
+        示例1：
+        extract_1 = '''
+            {
+              "result": {
+                "valueSets": [
+                  {
+                    "id": "cnwqk75-anus-body-location-vs",
+                    "title": "肛门部位解剖位置值集",
+                    "description": "基于ICD-O-3的肛门部位编码值集",
+                    "url": "http://localhost:3456/api/terminology/ValueSet/cnwqk75-anus-body-location-vs",
+                    "include": {
+                      "system": "http://localhost:3456/api/terminology/CodeSystem/icdo3",
+                      "regexFilter": "/C21\\.[0-8]/"
+                    }
+                  },
+                  {
+                    "id": "cnwqk75-anus-disease-vs",
+                    "title": "肛门疾病诊断值集",
+                    "description": "基于ICD-10的肛门疾病编码值集",
+                    "url": "http://localhost:3456/api/terminology/ValueSet/cnwqk75-anus-disease-vs",
+                    "include": {
+                      "system": "http://localhost:3456/api/terminology/CodeSystem/icd10",
+                      "regexFilter": "/K62\\.[0-9]|C21\\.[0-9]|K62\\.5/"
+                    }
+                  },
+                  {
+                    "id": "cnwqk75-anus-surgery-vs",
+                    "title": "肛门手术操作值集",
+                    "description": "包含所有肛门手术操作编码的值集",
+                    "url": "http://localhost:3456/api/terminology/ValueSet/cnwqk75-anus-surgery-vs",
+                    "include": {
+                      "system": "CNWQK75_AnusSurgeryCS"
+                    }
+                  }
                 ],
-                "neg_logic_rule": {{         # 3. 否定逻辑规则
-                "否定关键词列表": ["无", "不", "否认", "未", "拒绝", "戒", "禁", "从不", "不嗜"],
-                "否定模式列表": ["无饮酒史", "不饮酒", "戒酒", "禁酒", "拒绝饮酒", "否认饮酒", "从不饮酒"],
-                "否定判断逻辑": "若病例含否定模式，或否定关键词与核心关键词距离≤5个字符，则判定为“无饮酒史”"
-                }}
-            }}
-        }}
-        
-        请基于以下输入完成本任务：
-        子任务1输出结果：{result_by_step_1}
-        ''',
-
-    "step_3_class_init":
-        '''
-        任务3：__init__方法初始化逻辑生成
-        目标：生成FHIRResourceBundleGenerator类的__init__方法代码，需初始化2类变量：① FHIR相关配置（从子任务1提取）；② 文本提取规则（从子任务2提取），变量名需与后续方法复用。
-        输入：
-        1. 子任务1输出的“FHIR配置信息”
-        2. 子任务2输出的“提取规则”（核心关键词、否定词、否定模式、正则等）
-        
-        输出格式：
-        直接输出__init__方法的Python代码，需满足：
-        - 参数仅保留fhir_api_base: str（按用户要求）；
-        - 用self.xxx定义实例变量，变量名清晰（如self.fhir_observation_profile、self.core_keywords）；
-        - 若有单位转换需求（如“两→ml”），需在__init__中定义单位映射表（参考示例）。
-        
-        Few-shot示例：
-        输入1（FHIR配置）：
-        {{
-          "observation_profile_url": "http://localhost:3456/api/terminology/Profile/cnwqk435-alcohol-consumption",
-          "main_code_system": "http://localhost:3456/api/terminology/CodeSystem/cnwqk435-observation-cs",
-          "main_code": "alcohol-consumption",
-          "main_code_display": "酒精消费",
-          "component_codes": [
-            {{"code": "drinking-history-status", "display": "饮酒史状态", "value_type": "CodeableConcept"}},
-            {{"code": "duration-of-drinking", "display": "饮酒持续时间", "value_type": "Quantity"}}
-          ]
-        }}
-        输入2（提取规则）：
-        核心关键词列表：["饮酒", "喝酒", "酒精", "酒"]；否定关键词列表：["无", "不", "否认", "戒"]；否定模式列表：["无饮酒史", "不饮酒"]；每日摄入量需单位转换。
-        
-        输出代码：
-        ```python
-            def __init__(self, fhir_api_base: str):
-                self.fhir_api_base = fhir_api_base  # FHIR服务器基础地址（预留扩展）
-                # 1. FHIR配置信息初始化（来自子任务1）
-                self.fhir_observation_profile = "http://localhost:3456/api/terminology/Profile/cnwqk435-alcohol-consumption"
-                self.main_code_system = "http://localhost:3456/api/terminology/CodeSystem/cnwqk435-observation-cs"
-                self.main_code = "alcohol-consumption"
-                self.main_code_display = "酒精消费"
-                # 组件Code配置（对应待提取字段）
-                self.component_code_map = {{
-                    "drinking-history-status": {{"display": "饮酒史状态", "value_type": "CodeableConcept"}},
-                    "duration-of-drinking": {{"display": "饮酒持续时间", "value_type": "Quantity"}}
-                }}
-                
-                # 2. 文本提取规则初始化（来自子任务2）
-                self.core_keywords = ["饮酒", "喝酒", "酒精", "酒", "酗酒", "嗜酒", "白酒", "啤酒", "葡萄酒"]  # 相关性判断关键词
-                self.negative_keywords = ["无", "不", "否认", "未", "拒绝", "戒", "禁", "从不", "不嗜"]  # 否定关键词
-                self.negative_patterns = ["无饮酒史", "不饮酒", "戒酒", "禁酒", "拒绝饮酒", "否认饮酒", "从不饮酒"]  # 固定否定模式
-                
-                # 3. 单位转换映射（针对“每日酒精摄入量”字段）
-                self.unit_convert_map = {{
-                    "ml": 1.0, "毫升": 1.0, "两": 50.0, "杯": 150.0, "瓶": 500.0,
-                    "听": 330.0, "罐": 330.0, "g": 1.25, "克": 1.25
-                }}
-                # 酒类酒精含量（体积百分比）
-                self.alcohol_content_map = {{
-                    "白酒": 0.40, "啤酒": 0.05, "葡萄酒": 0.12, "红酒": 0.12, "黄酒": 0.15, "洋酒": 0.40, "default": 0.40
-                }}
-        ```
-        
-        请基于以下输入完成本任务：
-        1. 子任务1输出的“FHIR配置信息”：{result_by_step_1}
-        2. 子任务2输出的“提取规则”：{result_by_step_2}
-        ''',
-
-    "step_4_class_core_code":
-        '''
-        任务4：核心辅助方法生成
-        目标：生成2个Python辅助方法，需与子任务3的__init__变量复用，且符合FHIR_FSH定义：
-        1. _extract_clinical_info(text: str) -> Dict[str, Any]：输入单条病例文本，输出提取的待提取字段结果（如{{"has_history": True, "duration": 5}}）；
-        2. _create_observation(patient_id: str, text: str, timestamp: str, clinical_info: Dict[str, Any]) -> Dict[str, Any]：输入患者ID、病例文本、时间戳、提取结果，输出符合FHIR_FSH的Observation资源字典。
-        
-        输入：
-        1. 子任务1输出（临床问题核心对象、待提取字段、FHIR配置信息）
-        2. 子任务3输出的__init__方法代码（参考变量名）
-        3. 子任务2输出的提取规则
-        
-        输出格式：
-        直接输出2个辅助方法的完整Python代码，需满足：
-        - _extract_clinical_info：包含“相关性判断→否定判断→字段提取”逻辑，用子任务2的规则；
-        - _create_observation：包含Observation的resourceType、id、meta.profile、code、subject、effectiveDateTime、component（按子任务1的component_codes）。
-        
-        Few-shot示例：
-        输入1（子任务1关键信息）：临床问题核心对象=饮酒史，待提取字段=[有无饮酒史，饮酒持续时间，每日酒精摄入量，酒类类型]，FHIR配置见子任务1示例；
-        输入2（__init__变量）：self.core_keywords、self.negative_patterns、self.unit_convert_map等；
-        输入3（提取规则）：子任务2饮酒史规则。
-        
-        输出代码：
-        ```python
-            def _extract_clinical_info(self, text: str) -> Dict[str, Any]:
-                """从病例文本中提取饮酒史相关信息"""
-                result = {{
-                    "has_history": None,  # True/False/None（None表示无相关信息）
-                    "duration": None,     # 饮酒持续时间（年）
-                    "daily_intake": None, # 每日纯酒精摄入量（克/天）
-                    "alcohol_type": None  # 酒类类型
-                }}
-                
-                # 1. 相关性判断：无核心关键词则返回空结果
-                if not any(keyword in text for keyword in self.core_keywords):
-                    return result
-                
-                # 2. 否定判断：含否定模式或上下文否定则标记为无饮酒史
-                has_explicit_negative = any(re.search(pattern, text) for pattern in self.negative_patterns)
-                has_context_negative = False
-                for neg_word in self.negative_keywords:
-                    # 检查否定词与核心关键词距离≤5字符（避免误判）
-                    neg_positions = [m.start() for m in re.finditer(neg_word, text)]
-                    core_positions = [m.start() for m in re.finditer('|'.join(self.core_keywords), text)]
-                    if any(abs(n - c) <= 5 for n in neg_positions for c in core_positions):
-                        has_context_negative = True
-                        break
-                if has_explicit_negative or has_context_negative:
-                    result["has_history"] = False
-                    return result
-                
-                # 3. 有饮酒史：提取各字段（按子任务2规则）
-                result["has_history"] = True
-                # 提取酒类类型
-                alcohol_types = ["白酒", "啤酒", "葡萄酒", "红酒", "黄酒", "洋酒"]
-                for a_type in alcohol_types:
-                    if a_type in text:
-                        result["alcohol_type"] = a_type
-                        break
-                # 提取饮酒持续时间（正则匹配）
-                duration_patterns = [r'饮酒[已约有]?(\d+)年', r'喝酒[已约有]?(\d+)余年', r'饮酒≥(\d+)年']
-                for pattern in duration_patterns:
-                    match = re.search(pattern, text)
-                    if match:
-                        result["duration"] = int(match.group(1))
-                        break
-                # 提取每日酒精摄入量（正则匹配+单位转换）
-                intake_patterns = [r'饮酒(\d+)(两|杯|ml)/天', r'每日饮酒(\d+)(g|克)', r'饮酒量(\d+)(ml|两)']
-                for pattern in intake_patterns:
-                    match = re.search(pattern, text)
-                    if match:
-                        value = float(match.group(1))
-                        unit = match.group(2)
-                        alcohol_type = result["alcohol_type"] or "default"
-                        # 单位转换：转为毫升
-                        ml_value = value * self.unit_convert_map.get(unit, 1.0)
-                        # 计算纯酒精克数（体积×酒精含量×0.8g/ml）
-                        alcohol_percent = self.alcohol_content_map.get(alcohol_type, 0.40)
-                        pure_alcohol_g = ml_value * alcohol_percent * 0.8
-                        result["daily_intake"] = round(pure_alcohol_g, 2)
-                        break
-                return result
+                "codeSystems": [
+                  {
+                    "id": "cnwqk75-anus-surgery-cs",
+                    "title": "肛门手术操作编码系统",
+                    "description": "自定义肛门手术操作编码系统",
+                    "url": "http://localhost:3456/api/terminology/CodeSystem/cnwqk75-anus-surgery-cs",
+                    "caseSensitive": true,
+                    "codes": [
+                      {
+                        "code": "ANS001",
+                        "display": "肛门瘘管切除术",
+                        "additionalDisplay": "痔疮手术"
+                      },
+                      {
+                        "code": "ANS002",
+                        "display": "肛门成形术"
+                      },
+                      {
+                        "code": "ANS003",
+                        "display": "肛门括约肌切开术"
+                      },
+                      {
+                        "code": "ANS004",
+                        "display": "痔切除术",
+                        "additionalDisplay": "痔疮手术"
+                      },
+                      {
+                        "code": "ANS005",
+                        "display": "肛门脓肿引流术"
+                      }
+                    ]
+                  }
+                ],
+                "profiles": [
+                  {
+                    "id": "cnwqk75-anus-surgery-patient",
+                    "parent": "Procedure",
+                    "title": "肛门手术患者规范",
+                    "description": "定义接受肛门手术的患者资源规范",
+                    "url": "http://localhost:3456/api/terminology/Profile/cnwqk75-anus-surgery-patient",
+                    "elements": [
+                      {
+                        "path": "status",
+                        "constraint": "1..1"
+                      },
+                      {
+                        "path": "code",
+                        "constraint": "from CNWQK75_AnusSurgeryVS (required)"
+                      },
+                      {
+                        "path": "bodySite",
+                        "constraint": "from CNWQK75_AnusBodyLocationVS (required)"
+                      },
+                      {
+                        "path": "subject",
+                        "constraint": "1..1"
+                      },
+                      {
+                        "path": "performed[x]",
+                        "constraint": "1..1"
+                      },
+                      {
+                        "path": "reasonCode",
+                        "constraint": "from CNWQK75_AnusDiseaseVS"
+                      },
+                      {
+                        "path": "note",
+                        "constraint": "0..* MS"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "cnwqk75-anus-disease-patient",
+                    "parent": "Condition",
+                    "title": "肛门疾病患者规范",
+                    "description": "定义肛门疾病患者的诊断资源规范",
+                    "url": "http://localhost:3456/api/terminology/Profile/cnwqk75-anus-disease-patient",
+                    "elements": [
+                      {
+                        "path": "clinicalStatus",
+                        "constraint": "1..1"
+                      },
+                      {
+                        "path": "code",
+                        "constraint": "from CNWQK75_AnusDiseaseVS (required)"
+                      },
+                      {
+                        "path": "subject",
+                        "constraint": "1..1"
+                      },
+                      {
+                        "path": "onset[x]",
+                        "constraint": "0..1"
+                      },
+                      {
+                        "path": "note",
+                        "constraint": "0..* MS"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "cnwqk75-clinical-note",
+                    "parent": "Annotation",
+                    "title": "临床注释规范",
+                    "description": "定义临床文本注释的规范",
+                    "url": "http://localhost:3456/api/terminology/Profile/cnwqk75-clinical-note",
+                    "elements": [
+                      {
+                        "path": "text",
+                        "constraint": "1..1"
+                      },
+                      {
+                        "path": "time",
+                        "constraint": "0..1"
+                      },
+                      {
+                        "path": "author[x]",
+                        "constraint": "0..1"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            '''
             
-            def _create_observation(self, patient_id: str, text: str, timestamp: str, clinical_info: Dict[str, Any]) -> Dict[str, Any]:
-                """创建符合酒精消费Profile的Observation资源"""
-                import uuid  # 确保导入uuid
-                observation_id = str(uuid.uuid1())
-                observation = {{
-                    "resourceType": "Observation",
-                    "id": observation_id,
-                    "meta": {{
-                        "profile": [self.fhir_observation_profile]  # 复用__init__中的FHIR Profile
-                    }},
-                    "text": {{
-                        "status": "generated",
-                        "div": f"<div xmlns=\"http://www.w3.org/1999/xhtml\">病例文本摘录：{{text}}</div>"
-                    }},
-                    "status": "final",
-                    "code": {{
-                        "coding": [
-                            {{
-                                "system": self.main_code_system,
-                                "code": self.main_code,
-                                "display": self.main_code_display
-                            }}
-                        ],
-                        "text": self.main_code_display
-                    }},
-                    "subject": {{
-                        "reference": f"Patient/{{patient_id}}"
-                    }},
-                    "effectiveDateTime": timestamp,
-                    "component": []
-                }}
+            code_1 = '''
+            import uuid
+            import re
+            from typing import List, Dict, Any
+            
+            # 定义映射字典
+            SURGERY_MAPPING = {
+                "痔疮手术": ("ANS004", "痔切除术"),
+                "痔切除术": ("ANS004", "痔切除术"),
+                "肛门瘘管切除术": ("ANS001", "肛门瘘管切除术"),
+                "肛门成形术": ("ANS002", "肛门成形术"),
+                "肛门括约肌切开术": ("ANS003", "肛门括约肌切开术"),
+                "肛门脓肿引流术": ("ANS005", "肛门脓肿引流术"),
+                "肛瘘手术": ("ANS001", "肛门瘘管切除术"),
+                "肛周脓肿手术": ("ANS005", "肛门脓肿引流术")
+            }
+            
+            DISEASE_MAPPING = {
+                "肛门息肉": ("K62.8", "肛门息肉"),
+                "肛裂": ("K62.8", "肛裂"),
+                "肛门狭窄": ("K62.8", "肛门狭窄"),
+                "肛门失禁": ("K62.8", "肛门失禁"),
+                "肛门脓肿": ("K62.8", "肛门脓肿"),
+                "肛门瘘": ("K62.8", "肛门瘘"),
+                "肛门出血": ("K62.5", "肛门出血"),
+                "便血": ("K62.5", "肛门出血"),
+                "肛周脓肿": ("K62.8", "肛门脓肿"),
+                "肛门恶性肿瘤": ("C21.1", "肛门恶性肿瘤"),
+                "肛管癌": ("C21.2", "肛管恶性肿瘤"),
+                "肛门癌": ("C21.1", "肛门恶性肿瘤")
+            }
+            
+            BODY_SITE_MAPPING = {
+                "肛门": ("C21.0", "肛门"),
+                "肛管": ("C21.2", "肛管"),
+                "肛缘": ("C21.8", "肛缘"),
+                "直肠肛门": ("C21.0", "直肠肛门")
+            }
+            
+            class FHIRResourceBundleGenerator:
+                def __init__(self, fhir_api_base: str):
+                    self.fhir_api_base = fhir_api_base
                 
-                # 添加“饮酒史状态”组件（CodeableConcept）
-                history_status_comp = {{
-                    "code": {{
-                        "coding": [
-                            {{
-                                "system": self.main_code_system.replace("observation-cs", "component-cs"),  # 组件CodeSystem（复用主CodeSystem逻辑）
-                                "code": "drinking-history-status",
-                                "display": self.component_code_map["drinking-history-status"]["display"]
-                            }}
-                        ],
-                        "text": self.component_code_map["drinking-history-status"]["display"]
-                    }}
-                }}
-                if clinical_info["has_history"] is False:
-                    history_status_comp["valueCodeableConcept"] = {{
-                        "coding": [{{"system": f"{{self.main_code_system.replace('observation-cs', 'alcohol-history-cs')}}", "code": "no-history", "display": "无饮酒史"}}],
-                        "text": "无饮酒史"
-                    }}
-                elif clinical_info["has_history"] is True:
-                    history_status_comp["valueCodeableConcept"] = {{
-                        "coding": [{{"system": f"{{self.main_code_system.replace('observation-cs', 'alcohol-history-cs')}}", "code": "yes-history", "display": "有饮酒史"}}],
-                        "text": "有饮酒史"
-                    }}
-                observation["component"].append(history_status_comp)
+                def _extract_entities(self, text: str) -> dict:
+                    '''从中文临床文本中提取手术、疾病和身体部位信息'''
+                    results = {
+                        "surgeries": [],
+                        "diseases": [],
+                        "body_sites": []
+                    }
+                    
+                    # 提取手术信息
+                    for term, (code, display) in SURGERY_MAPPING.items():
+                        if term in text:
+                            results["surgeries"].append({
+                                "code": code,
+                                "display": display,
+                                "text": term
+                            })
+                    
+                    # 提取疾病信息
+                    for term, (code, display) in DISEASE_MAPPING.items():
+                        if term in text:
+                            results["diseases"].append({
+                                "code": code,
+                                "display": display,
+                                "text": term
+                            })
+                    
+                    # 提取身体部位信息
+                    for term, (code, display) in BODY_SITE_MAPPING.items():
+                        if term in text:
+                            results["body_sites"].append({
+                                "code": code,
+                                "display": display,
+                                "text": term
+                            })
+                    
+                    return results
                 
-                # 有饮酒史时，添加“饮酒持续时间”组件（Quantity）
-                if clinical_info["has_history"] is True and clinical_info["duration"] is not None:
-                    duration_comp = {{
-                        "code": {{
+                def _create_procedure_resource(self, patient_id: str, report: dict, 
+                                              surgery: dict, diseases: list) -> dict:
+                    '''创建肛门手术Procedure资源'''
+                    # 默认身体部位为肛门
+                    body_site = {
+                        "coding": [{
+                            "system": "http://localhost:3456/api/terminology/CodeSystem/icdo3",
+                            "code": "C21.0",
+                            "display": "肛门"
+                        }],
+                        "text": "肛门"
+                    }
+                    
+                    # 如果提取到具体身体部位则使用
+                    if report.get("body_sites"):
+                        body_site = {
+                            "coding": [{
+                                "system": "http://localhost:3456/api/terminology/CodeSystem/icdo3",
+                                "code": report["body_sites"][0]["code"],
+                                "display": report["body_sites"][0]["display"]
+                            }],
+                            "text": report["body_sites"][0]["text"]
+                        }
+                    
+                    # 构建疾病原因编码
+                    reason_codes = []
+                    for disease in diseases:
+                        reason_codes.append({
+                            "coding": [{
+                                "system": "http://localhost:3456/api/terminology/CodeSystem/icd10",
+                                "code": disease["code"],
+                                "display": disease["display"]
+                            }],
+                            "text": disease["text"]
+                        })
+                    
+                    return {
+                        "resourceType": "Procedure",
+                        "id": str(uuid.uuid1()),
+                        "meta": {
+                            "profile": [
+                                "http://localhost:3456/api/terminology/Profile/cnwqk75-anus-surgery-patient"
+                            ]
+                        },
+                        "status": "completed",
+                        "code": {
+                            "coding": [{
+                                "system": "http://localhost:3456/api/terminology/CodeSystem/cnwqk75-anus-surgery-cs",
+                                "code": surgery["code"],
+                                "display": surgery["display"]
+                            }],
+                            "text": surgery["text"]
+                        },
+                        "bodySite": [body_site],
+                        "subject": {
+                            "reference": f"Patient/{patient_id}"
+                        },
+                        "performedDateTime": report["timestamp"],
+                        "reasonCode": reason_codes,
+                        "note": [{
+                            "text": report["text"]
+                        }]
+                    }
+                
+                def _create_condition_resource(self, patient_id: str, report: dict, 
+                                              disease: dict) -> dict:
+                    '''创建肛门疾病Condition资源'''
+                    return {
+                        "resourceType": "Condition",
+                        "id": str(uuid.uuid1()),
+                        "meta": {
+                            "profile": [
+                                "http://localhost:3456/api/terminology/Profile/cnwqk75-anus-disease-patient"
+                            ]
+                        },
+                        "clinicalStatus": {
+                            "coding": [{
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                                "code": "active",
+                                "display": "现患"
+                            }]
+                        },
+                        "code": {
+                            "coding": [{
+                                "system": "http://localhost:3456/api/terminology/CodeSystem/icd10",
+                                "code": disease["code"],
+                                "display": disease["display"]
+                            }],
+                            "text": disease["text"]
+                        },
+                        "subject": {
+                            "reference": f"Patient/{patient_id}"
+                        },
+                        "onsetDateTime": report["timestamp"],
+                        "note": [{
+                            "text": report["text"]
+                        }]
+                    }
+                
+                def parse_clinical_text_to_fhir_bundle(self, patient_id, case_reports, ai_algorithm_type="nlp"):
+                    resources = []
+                    
+                    for report in case_reports:                        
+                        # 提取实体信息
+                        extracted = self._extract_entities(report["text"])
+                        if not any(extracted.values()):  # 没有提取到任何信息
+                            continue
+                        
+                        # 添加提取结果到报告信息中
+                        processed_report = report.copy()
+                        processed_report.update(extracted)
+                        
+                        # 创建手术资源
+                        for surgery in processed_report["surgeries"]:
+                            procedure = self._create_procedure_resource(
+                                patient_id, processed_report, surgery, processed_report["diseases"]
+                            )
+                            resources.append(procedure)
+                        
+                        # 创建疾病资源
+                        for disease in processed_report["diseases"]:
+                            condition = self._create_condition_resource(
+                                patient_id, processed_report, disease
+                            )
+                            resources.append(condition)
+                    
+                    # 构建Bundle
+                    entries = []
+                    for resource in resources:
+                        entries.append({
+                            "resource": resource,
+                            "request": {
+                                "method": "POST",
+                                "url": resource["resourceType"]
+                            }
+                        })
+                    
+                    return {
+                        "resourceType": "Bundle",
+                        "type": "transaction",
+                        "total": len(entries),
+                        "entry": entries
+                    }
+            '''
+        示例2：
+        extract_2 = '''
+            {
+              "result": {
+                "valueSets": [
+                  {
+                    "id": "cnwqk595-gerd-symptoms-vs",
+                    "title": "GERD症状值集",
+                    "description": "用于描述胃食管反流病（GERD）相关症状的值集，包含ICD-10和自定义编码。",
+                    "url": "http://localhost:3456/api/terminology/ValueSet/cnwqk595-gerd-symptoms-vs",
+                    "include": [
+                      {
+                        "system": "http://localhost:3456/api/terminology/CodeSystem/icd10",
+                        "filter": "code = \"R12\""
+                      },
+                      {
+                        "system": "Cnwqk595GerdSymptomsCS"
+                      }
+                    ]
+                  }
+                ],
+                "codeSystems": [
+                  {
+                    "id": "cnwqk595-gerd-symptoms-cs",
+                    "title": "GERD症状编码系统",
+                    "description": "胃食管反流病（GERD）相关症状的自定义编码系统。",
+                    "url": "http://localhost:3456/api/terminology/CodeSystem/cnwqk595-gerd-symptoms-cs",
+                    "codes": [
+                      {
+                        "code": "heartburn",
+                        "display": "烧心",
+                        "additionalDisplay": "胸骨后烧灼感"
+                      },
+                      {
+                        "code": "acid_regurgitation",
+                        "display": "泛酸",
+                        "additionalDisplay": "胃酸反流到口腔或喉咙"
+                      },
+                      {
+                        "code": "retrosternal_burning_pain",
+                        "display": "胸骨后灼痛",
+                        "additionalDisplay": "胸骨后烧灼样疼痛"
+                      },
+                      {
+                        "code": "coughing_when_lying_down",
+                        "display": "平卧或睡眠时呛咳",
+                        "additionalDisplay": "平卧或睡眠时发生的咳嗽"
+                      },
+                      {
+                        "code": "throat_discomfort",
+                        "display": "咽喉不适",
+                        "additionalDisplay": "喉咙不适感"
+                      }
+                    ]
+                  }
+                ],
+                "profiles": [
+                  {
+                    "id": "cnwqk595-gerd-symptoms-observation",
+                    "parent": "Observation",
+                    "title": "GERD症状观察量表Profile",
+                    "description": "用于记录胃食管反流病（GERD）相关症状的Observation Profile。",
+                    "url": "http://localhost:3456/api/terminology/Profile/cnwqk595-gerd-symptoms-observation",
+                    "elements": [
+                      {
+                        "path": "status",
+                        "constraint": "MS"
+                      },
+                      {
+                        "path": "code",
+                        "constraint": "MS"
+                      },
+                      {
+                        "path": "code",
+                        "constraint": "from Cnwqk595GerdSymptomsVS (required)"
+                      },
+                      {
+                        "path": "subject",
+                        "constraint": "MS"
+                      },
+                      {
+                        "path": "value[x]",
+                        "constraint": "MS"
+                      },
+                      {
+                        "path": "value[x]",
+                        "constraint": "only boolean"
+                      },
+                      {
+                        "path": "valueBoolean",
+                        "constraint": "1..1 MS"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            '''
+            code_2 = '''
+            import uuid
+            import re
+            from datetime import datetime
+            
+            class FHIRResourceBundleGenerator:
+                def __init__(self, fhir_api_base: str):
+                    self.fhir_api_base = fhir_api_base
+                    
+                    # 症状代码映射
+                    self.symptoms_mapping = {
+                        "heartburn": {
+                            "code": "heartburn",
+                            "display": "烧心",
+                            "keywords": ["烧心", "心口烧灼", "胸骨后烧灼", "胃灼热"]
+                        },
+                        "acid_regurgitation": {
+                            "code": "acid_regurgitation",
+                            "display": "泛酸",
+                            "keywords": ["泛酸", "反酸", "胃酸反流", "酸水"]
+                        },
+                        "retrosternal_burning_pain": {
+                            "code": "retrosternal_burning_pain",
+                            "display": "胸骨后灼痛",
+                            "keywords": ["胸骨后灼痛", "胸骨后疼痛", "胸骨后烧灼痛", "胸痛"]
+                        },
+                        "coughing_when_lying_down": {
+                            "code": "coughing_when_lying_down",
+                            "display": "平卧或睡眠时呛咳",
+                            "keywords": ["平卧呛咳", "睡眠呛咳", "卧位咳嗽", "躺下咳嗽", "夜间咳嗽"]
+                        },
+                        "throat_discomfort": {
+                            "code": "throat_discomfort",
+                            "display": "咽喉不适",
+                            "keywords": ["咽喉不适", "喉咙不适", "咽部异物感", "喉部不适", "咽痛"]
+                        }
+                    }
+                    
+                    # 否定词列表
+                    self.negation_terms = ["无", "没有", "未", "否认", "不", "从未", "从来没", "否", "未见", "排除"]
+                    
+                    # 症状编码系统URL
+                    self.symptoms_cs_url = "http://localhost:3456/api/terminology/CodeSystem/cnwqk595-gerd-symptoms-cs"
+                    self.icd10_url = "http://localhost:3456/api/terminology/CodeSystem/icd10"
+            
+                def check_negation(self, text, keyword, window_size=15):
+                    '''
+                    检查关键词附近是否有否定词
+                    '''
+                    # 找到所有关键词出现的位置
+                    positions = [m.start() for m in re.finditer(keyword, text)]
+                    
+                    for pos in positions:
+                        # 确定检查窗口
+                        start = max(0, pos - window_size)
+                        end = min(len(text), pos + len(keyword) + window_size)
+                        window_text = text[start:end]
+                        
+                        # 检查窗口中是否有否定词
+                        for negation in self.negation_terms:
+                            if negation in window_text:
+                                return True
+                                
+                    return False
+            
+                def parse_clinical_text_to_fhir_bundle(self, patient_id, case_reports, ai_algorithm_type="nlp"):
+                    '''
+                    从临床文本中提取GERD症状信息并生成FHIR Bundle
+                    '''
+                    entries = []
+                    
+                    for report in case_reports:
+                        text = report.get("text", "")
+                        timestamp = report.get("timestamp", "")
+                            
+                        # 检查每个症状
+                        for symptom_key, symptom_info in self.symptoms_mapping.items():
+                            symptom_found = False
+                            symptom_negated = False
+                            
+                            # 检查每个关键词
+                            for keyword in symptom_info["keywords"]:
+                                if keyword in text:
+                                    symptom_found = True
+                                    if self.check_negation(text, keyword):
+                                        symptom_negated = True
+                                    else:
+                                        # 只要有一个关键词没有被否定，就认为症状存在
+                                        symptom_negated = False
+                                        break
+                            
+                            # 如果找到症状，创建Observation资源
+                            if symptom_found:
+                                # 生成唯一ID
+                                observation_id = str(uuid.uuid1())
+                                
+                                # 创建Observation资源
+                                observation = {
+                                    "resourceType": "Observation",
+                                    "id": observation_id,
+                                    "meta": {
+                                        "profile": [
+                                            "http://localhost:3456/api/terminology/Profile/cnwqk595-gerd-symptoms-observation"
+                                        ]
+                                    },
+                                    "text": {
+                                        "status": "generated",
+                                        "div": f"从文本『{text}』中提取到症状『{symptom_info['display']}』，否定状态：{'是' if symptom_negated else '否'}"
+                                    },
+                                    "status": "final",
+                                    "code": {
+                                        "coding": [
+                                            {
+                                                "system": self.symptoms_cs_url,
+                                                "code": symptom_info["code"],
+                                                "display": symptom_info["display"]
+                                            }
+                                        ],
+                                        "text": symptom_info["display"]
+                                    },
+                                    "subject": {
+                                        "reference": f"Patient/{patient_id}"
+                                    },
+                                    "effectiveDateTime": timestamp,
+                                    "valueBoolean": not symptom_negated
+                                }
+                                
+                                # 如果是烧心症状，添加ICD-10编码
+                                if symptom_key == "heartburn":
+                                    observation["code"]["coding"].append({
+                                        "system": self.icd10_url,
+                                        "code": "R12",
+                                        "display": "烧心"
+                                    })
+                                
+                                # 创建Bundle entry
+                                entry = {
+                                    "resource": observation,
+                                    "request": {
+                                        "method": "POST",
+                                        "url": "Observation"
+                                    }
+                                }
+                                
+                                entries.append(entry)
+                    
+                    # 创建Bundle
+                    bundle = {
+                        "resourceType": "Bundle",
+                        "type": "transaction",
+                        "total": len(entries),
+                        "entry": entries
+                    }
+                    
+                    return bundle
+            '''
+        示例3：
+        extract_3 = '''
+            {
+              "result": {
+                "valueSets": [
+                  {
+                    "id": "cnwqk815-SmokingStatusValueSet",
+                    "title": "吸烟状态值集",
+                    "description": "包含吸烟状态所有可能值的值集。",
+                    "url": "http://localhost:3456/api/terminology/ValueSet/cnwqk815-SmokingStatusValueSet",
+                    "include": {
+                      "system": "SmokingStatusCodeSystem"
+                    }
+                  }
+                ],
+                "codeSystems": [
+                  {
+                    "id": "cnwqk815-SmokingStatusCodeSystem",
+                    "title": "吸烟状态代码系统",
+                    "description": "用于表示吸烟状态的代码系统。",
+                    "url": "http://localhost:3456/api/terminology/CodeSystem/cnwqk815-SmokingStatusCodeSystem",
+                    "codes": [
+                      {
+                        "code": "non_smoker",
+                        "display": "不吸烟"
+                      },
+                      {
+                        "code": "current_smoker",
+                        "display": "当前吸烟"
+                      },
+                      {
+                        "code": "former_smoker",
+                        "display": "以前吸烟"
+                      }
+                    ]
+                  }
+                ],
+                "profiles": [
+                  {
+                    "id": "cnwqk815-SmokingStatusProfile",
+                    "parent": "Observation",
+                    "title": "吸烟状态观察剖面",
+                    "description": "用于表示患者吸烟状态的观察剖面。",
+                    "url": "http://localhost:3456/api/terminology/Profile/cnwqk815-SmokingStatusProfile",
+                    "elements": [
+                      {
+                        "path": "status",
+                        "constraint": "1..1"
+                      },
+                      {
+                        "path": "code",
+                        "constraint": "= http://loinc.org#72166-2 \"吸烟状态\""
+                      },
+                      {
+                        "path": "code",
+                        "constraint": "1..1"
+                      },
+                      {
+                        "path": "subject",
+                        "constraint": "1..1"
+                      },
+                      {
+                        "path": "valueCodeableConcept",
+                        "constraint": "1..1"
+                      },
+                      {
+                        "path": "valueCodeableConcept",
+                        "constraint": "from SmokingStatusValueSet (required)"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            '''
+            code_3 = '''
+            # 2024-06-20 GPT-4o 本代码用于从临床文本中提取吸烟状态信息并生成FHIR Bundle资源
+            import uuid
+            import re
+            import json
+            from datetime import datetime
+            
+            class FHIRResourceBundleGenerator:
+                def __init__(self, fhir_api_base: str):
+                    self.fhir_api_base = fhir_api_base
+                    # 定义吸烟状态模式
+                    self.non_smoker_patterns = [r'不吸烟', r'从未吸烟', r'无吸烟史', r'没有吸烟', r'不抽烟', r'无抽烟',r'否认吸烟史']
+                    self.former_smoker_patterns = [r'戒烟', r'曾吸烟', r'过去吸烟', r'以前吸烟', r'戒烟']
+                    self.current_smoker_patterns = [r'吸烟', r'抽烟', r'吸咽', r'吸烟史']
+                    # 否定词模式
+                    self.negation_patterns = [r'无', r'否', r'否认', r'未', r'没有', r'不', r'从未', r'没']
+            
+                def check_negation(self, text, start_index, window_size=10):
+                    '''检查文本中指定位置前是否有否定词'''
+                    # 提取匹配位置前的文本窗口
+                    window_start = max(0, start_index - window_size)
+                    preceding_text = text[window_start:start_index]
+                    
+                    # 检查窗口中是否有否定词
+                    for pattern in self.negation_patterns:
+                        if re.search(pattern, preceding_text):
+                            return True
+                    return False
+            
+                def determine_smoking_status(self, text):
+                    '''从文本中确定吸烟状态'''
+                    # 首先检查不吸烟模式
+                    for pattern in self.non_smoker_patterns:
+                        matches = re.finditer(pattern, text)
+                        for match in matches:
+                            # 对于不吸烟模式，通常不需要检查否定词，因为模式本身已包含否定含义
+                            return 'non_smoker'
+                    
+                    # 检查以前吸烟模式
+                    for pattern in self.former_smoker_patterns:
+                        matches = re.finditer(pattern, text)
+                        for match in matches:
+                            if not self.check_negation(text, match.start()):
+                                return 'former_smoker'
+                    
+                    # 检查当前吸烟模式
+                    for pattern in self.current_smoker_patterns:
+                        matches = re.finditer(pattern, text)
+                        for match in matches:
+                            if not self.check_negation(text, match.start()):
+                                return 'current_smoker'
+                    
+                    return None
+            
+                def parse_clinical_text_to_fhir_bundle(self, patient_id, case_reports, ai_algorithm_type="nlp"):
+                    '''从临床文本中解析吸烟状态并生成FHIR Bundle'''
+                    # 初始化变量
+                    smoking_status = None
+                    effective_date_time = None
+                    source_text = ""
+                    
+                    # 遍历所有病例报告，查找吸烟状态信息
+                    for report in case_reports:
+                        text = report.get('text', '')
+                        timestamp = report.get('timestamp', '')
+                        
+                        # 确定吸烟状态
+                        status = self.determine_smoking_status(text)
+                        if status:
+                            smoking_status = status
+                            effective_date_time = timestamp if timestamp else datetime.now().isoformat()
+                            source_text = text
+                            break  # 找到第一个匹配即停止
+                    
+                    # 如果没有找到吸烟状态信息，返回空Bundle
+                    if not smoking_status:
+                        return {
+                            "resourceType": "Bundle",
+                            "type": "transaction",
+                            "total": 0,
+                            "entry": []
+                        }
+                    
+                    # 映射吸烟状态代码
+                    status_map = {
+                        'non_smoker': {'code': 'non_smoker', 'display': '不吸烟'},
+                        'former_smoker': {'code': 'former_smoker', 'display': '以前吸烟'},
+                        'current_smoker': {'code': 'current_smoker', 'display': '当前吸烟'}
+                    }
+                    
+                    status_info = status_map[smoking_status]
+                    
+                    # 生成Observation资源
+                    observation_id = str(uuid.uuid1())
+                    observation = {
+                        "resourceType": "Observation",
+                        "id": observation_id,
+                        "meta": {
+                            "profile": [
+                                "http://localhost:3456/api/terminology/Profile/cnwqk815-SmokingStatusProfile"
+                            ]
+                        },
+                        "text": {
+                            "status": "generated",
+                            "div": f"文本摘录：{source_text[:100]}..."  # 截取前100个字符
+                        },
+                        "status": "final",
+                        "code": {
                             "coding": [
-                                {{
-                                    "system": self.main_code_system.replace("observation-cs", "component-cs"),
-                                    "code": "duration-of-drinking",
-                                    "display": self.component_code_map["duration-of-drinking"]["display"]
-                                }}
+                                {
+                                    "system": "http://loinc.org",
+                                    "code": "72166-2",
+                                    "display": "吸烟状态"
+                                }
                             ],
-                            "text": self.component_code_map["duration-of-drinking"]["display"]
-                        }},
-                        "valueQuantity": {{
-                            "value": clinical_info["duration"],
-                            "unit": "年",
-                            "system": "http://unitsofmeasure.org",
-                            "code": "a"
-                        }}
-                    }}
-                    observation["component"].append(duration_comp)
-                
-                # 有饮酒史时，添加“每日纯酒精摄入”组件（Quantity）
-                if clinical_info["has_history"] is True and clinical_info["daily_intake"] is not None:
-                    intake_comp = {{
-                        "code": {{
+                            "text": "吸烟状态"
+                        },
+                        "subject": {
+                            "reference": f"Patient/{patient_id}"
+                        },
+                        "effectiveDateTime": effective_date_time,
+                        "valueCodeableConcept": {
                             "coding": [
-                                {{
-                                    "system": self.main_code_system.replace("observation-cs", "component-cs"),
-                                    "code": "average-alcohol-intake",
-                                    "display": "平均纯酒精摄入"
-                                }}
+                                {
+                                    "system": "http://localhost:3456/api/terminology/CodeSystem/cnwqk815-SmokingStatusCodeSystem",
+                                    "code": status_info['code'],
+                                    "display": status_info['display']
+                                }
                             ],
-                            "text": "平均纯酒精摄入"
-                        }},
-                        "valueQuantity": {{
-                            "value": clinical_info["daily_intake"],
-                            "unit": "克/天",
-                            "system": "http://unitsofmeasure.org",
-                            "code": "g/d"
-                        }}
-                    }}
-                    observation["component"].append(intake_comp)
-                
-                return observation
-        ```
-        
-        请基于以下输入完成本任务：
-        1. 子任务1输出：{result_by_step_1}
-        2. 子任务3输出的__init__代码：{result_by_step_3}
-        3. 子任务2输出的提取规则：{result_by_step_2}
-        ''',
+                            "text": status_info['display']
+                        }
+                    }
+                    
+                    # 创建Bundle
+                    bundle = {
+                        "resourceType": "Bundle",
+                        "type": "transaction",
+                        "total": 1,
+                        "entry": [
+                            {
+                                "resource": observation,
+                                "request": {
+                                    "method": "POST",
+                                    "url": "Observation"
+                                }
+                            }
+                        ]
+                    }
+                    
+                    return bundle
+            '''
+        """,
 
-    "step_5_class_complete":
+    "step_3_params":
         '''
-        任务5：完整FHIRResourceBundleGenerator类整合
-        目标：整合前4个子任务成果，生成可直接运行的Python类。需包含「必要导入→类定义→__init__初始化→核心辅助方法→主处理方法」，实现“多份病例文本输入→提取临床信息→生成符合FHIR标准的Observation资源→组装成Transaction类型Bundle”的端到端流程，重点补全主方法parse_clinical_text_to_fhir_bundle。
-        输入：
-        1. 子任务3输出的__init__方法代码（初始化FHIR配置与提取规则）
-        2. 子任务4输出的2个核心辅助方法代码（_extract_clinical_info、_create_observation）
-        3. 子任务1输出的“临床问题核心对象”“FHIR配置信息”（确保Bundle与Observation结构匹配）
-        4. 子任务2输出的提取规则（主方法需复用否定/相关性判断逻辑）
-        
-        输出格式：
-        完整Python代码，需满足以下结构与要求：
-        1. 开头导入依赖库（re、uuid、datetime、Dict/Any类型标注）；
-        2. 类FHIRResourceBundleGenerator内包含4个方法：
-           - __init__：子任务3成果，初始化配置与规则；
-           - _extract_clinical_info：子任务4成果，提取临床字段；
-           - _create_observation：子任务4成果，生成Observation资源；
-           - parse_clinical_text_to_fhir_bundle（主方法）：新补全方法，需实现“Bundle初始化→遍历病例→调用辅助方法→组装资源→统计总数”逻辑；
-        3. 主方法要求：
-           - 参数：patient_id（患者唯一标识）、case_reports（病例列表，格式如[{{"text":"病例文本1","timestamp":"2024-10-01T10:00:00Z"}},...]）、ai_algorithm_type（默认"nlp"，标识提取算法）；
-           - 返回值：FHIR Bundle字典（类型transaction，含entry列表与total计数）；
-           - 逻辑：跳过无相关信息的病例，仅将有效Observation加入Bundle，每个entry需含resource和request（method=POST，url=Observation）。
-    
-    
-        Few-shot示例（以“饮酒史提取”为例，展示主方法核心逻辑）：
-        # 参考主方法实现（饮酒史场景）
-        ```python
-            def parse_clinical_text_to_fhir_bundle(self, patient_id: str, case_reports: List[Dict[str, str]], ai_algorithm_type: str = "nlp") -> Dict[str, Any]:
-                """
-                主方法：从多份病例文本生成含饮酒史Observation的FHIR Bundle
-                :param patient_id: 患者ID（如"pat-001"）
-                :param case_reports: 病例列表，每个元素含"text"（病例文本）和"timestamp"（时间戳，如"2024-10-01T10:00:00Z"）
-                :param ai_algorithm_type: 提取算法类型，默认nlp
-                :return: FHIR Bundle（transaction类型）
-                """
-                # 1. 初始化FHIR Bundle基础结构
-                fhir_bundle = {{
-                    "resourceType": "Bundle",
-                    "type": "transaction",  # 批量提交类型
-                    "total": 0,  # 有效资源总数，后续动态更新
-                    "entry": []  # 资源列表
-                }}
-        
-                # 2. 遍历每一份病例，提取信息并生成Observation
-                for report in case_reports:
-                    case_text = report.get("text", "").strip()
-                    case_timestamp = report.get("timestamp", datetime.now().isoformat() + "Z")  # 默认当前时间
-                    
-                    # 3. 调用辅助方法提取临床信息（饮酒史）
-                    clinical_info = self._extract_clinical_info(case_text)
-                    
-                    # 4. 跳过无相关信息的病例（has_history为None时无有效数据）
-                    if clinical_info.get("has_history") is None:
-                        continue
-                    
-                    # 5. 调用辅助方法生成Observation资源
-                    observation_resource = self._create_observation(
-                        patient_id=patient_id,
-                        text=case_text,
-                        timestamp=case_timestamp,
-                        clinical_info=clinical_info
-                    )
-                    
-                    # 6. 将Observation加入Bundle的entry，配置POST请求
-                    fhir_bundle["entry"].append({{
-                        "resource": observation_resource,
-                        "request": {{
-                            "method": "POST",  # FHIR批量提交常用方法
-                            "url": "Observation"  # 资源类型，与Observation对应
-                        }}
-                    }})
-        
-                # 7. 更新Bundle的有效资源总数
-                fhir_bundle["total"] = len(fhir_bundle["entry"])
-        
-                return fhir_bundle
-        ```
-    
-    
-        请基于以下输入完成本任务：
-        1. 子任务3的__init__方法代码：{result_by_step_3}
-        2. 子任务4的2个辅助方法代码：{result_by_step_4}
-        3. 子任务1的关键信息：问题类型={label}，临床问题核心对象={question}，FHIR配置信息={FHIR_FSH}
-        ''',
+        ------------------输入的FHIR提取信息如下所示：--------------------
+        {FHIR_FSH}
+        ------------- ----请输出可执行的Python代码：---------------------
+        '''
 }

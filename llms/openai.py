@@ -31,6 +31,8 @@ class OpenAIClient(object):
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+        if self.attrs.enable_search:
+            json_data["extra_body"] = {"enable_search": True}
 
         return json_data
 
@@ -38,7 +40,9 @@ class OpenAIClient(object):
         json_data = self._check_pre(query, temperature=temperature, max_tokens=max_tokens)
         json_data["stream"] = False
         completion = self.client.chat.completions.create(**json_data)
-        return completion.choices[0].message.content
+        content = completion.choices[0].message.content
+        print(content)
+        return content
 
     def chat_and_check(self, query, check_func, temperature: float = 0.7, max_tokens: int = 16384):
         check_status = False

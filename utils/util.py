@@ -25,9 +25,10 @@ def extract_excel_data(file_path: str) -> list:
         label = str(row.iloc[4]) if pd.notna(row.iloc[4]) else ""
         question = str(row.iloc[5]) if pd.notna(row.iloc[5]) else ""
         deepquery_id = str(row.iloc[6]) if pd.notna(row.iloc[6]) else ""
+        profile_id = str(row.iloc[7]) if pd.notna(row.iloc[7]) else ""
         fhir_fsh = str(row.iloc[8]) if pd.notna(row.iloc[8]) else ""
 
-        result.append((_id, label, question, deepquery_id, fhir_fsh))
+        result.append((_id, label, question, deepquery_id, profile_id, fhir_fsh))
 
     return result
 

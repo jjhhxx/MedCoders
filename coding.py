@@ -1,17 +1,19 @@
 import re
 import ast
+import uuid
 from typing import Dict, Optional, Tuple
-from llms import llm_client
+from llms import llm_client, llm_client_coder
 from model import intention_client_manager
 
 
-def generate_llm_response(intention: str, format_params: dict):
+def generate_llm_response(intention: str, format_params: dict, chat_client):
     """通用LLM响应生成函数"""
     prompt_template = intention_client_manager.get_intention_prompt_by_intention(intention)
+    params_template = intention_client_manager.get_intention_prompt_params_by_intention(intention)
     check_function = intention_client_manager.get_check_function_by_intention(intention)
     temperature, max_tokens = intention_client_manager.get_request_params_by_intention(intention)
-    formatted_prompt = prompt_template.format(**format_params)
-    return llm_client.chat_and_check(
+    formatted_prompt = prompt_template + params_template.format(**format_params)
+    return chat_client.chat_and_check(
         [{"role": "user", "content": formatted_prompt}],
         check_function,
         temperature=temperature,
@@ -49,80 +51,92 @@ def coding_with_question(label, question, FHIR_FSH):
         raise ValueError("The label and question cannot be empty")
 
     _, step_1_response = generate_llm_response(
-        "coding-extract_input_information",
+        "coding-step_1_extract_FHIR",
         {
             "label": label,
             "question": question,
             "FHIR_FSH": FHIR_FSH,
-        }
+        },
+        llm_client
     )
     print(f"------------------step_1_reason---------------")
-    print(step_1_response)
 
-    _, step_2_response = generate_llm_response(
-        "coding-define_rule",
-        {
-            "result_by_step_1": step_1_response,
-        }
-    )
-    print(f"------------------step_2_reason---------------")
-    print(step_2_response)
+    valueSets = step_1_response["valueSets"]
+    convert_valueSets = []
+    for valueSet in valueSets:
+        _, step_2_response = generate_llm_response(
+            "coding-step_2_online_search",
+            {
+                "FHIR_ValueSet": {
+                    "id": valueSet["id"],
+                    "title": valueSet["title"],
+                    "description": valueSet["description"],
+                },
+            },
+            llm_client
+        )
+        print(f"------------------step_2_reason---------------")
+        valueSet["detailed_information"] = step_2_response
+        convert_valueSets.append(valueSet)
+    step_1_response["valueSets"] = convert_valueSets
 
     _, step_3_response = generate_llm_response(
-        "coding-class_init",
+        "coding-step_3_generate",
         {
-            "result_by_step_1": step_1_response,
-            "result_by_step_2": step_2_response,
-        }
+            "FHIR_FSH": step_1_response,
+        },
+        llm_client_coder
     )
-    print(f"------------------step_3_reason---------------")
-    print(step_3_response)
 
-    _, step_4_response = generate_llm_response(
-        "coding-class_core_code",
-        {
-            "result_by_step_1": step_1_response,
-            "result_by_step_2": step_2_response,
-            "result_by_step_3": step_3_response,
-        }
-    )
-    print(f"------------------step_4_reason---------------")
-    print(step_4_response)
-
-    _, step_5_response = generate_llm_response(
-        "coding-class_complete",
-        {
-            "label": label,
-            "question": question,
-            "FHIR_FSH": FHIR_FSH,
-            "result_by_step_3": step_3_response,
-            "result_by_step_4": step_4_response,
-        }
-    )
-    print(f"------------------step_5_reason---------------")
-    print(step_5_response)
-
-    target_code, check = _check_python_code(step_5_response)
+    target_code, check = _check_python_code(step_3_response)
     if not check:
         return target_code
     raise TypeError("The target code is not correct python!")
 
 
 if __name__ == "__main__":
-    import json
+    import json, os
     from utils import extract_excel_data
-    meta = extract_excel_data(r"E:\xidian\比赛\CHIP2025-医学NLP代码\A榜数据\test A.xlsx")
+    from example_3 import base64_encode
+    meta = extract_excel_data(r"../A榜数据/test A.xlsx")
 
-    result = []
-    for _id, label, question, deepquery_id, fhir_fsh in meta:
+    for _id, label, question, deepquery_id, profile_id, fhir_fsh in meta:
+        if os.path.exists(f"./code_result/cnwqk{profile_id}.py"):
+            continue
         code = coding_with_question(label, question, fhir_fsh)
-        _result = {
-            "id": _id,
-            "deepquery_id": deepquery_id,
-            "code": code
-        }
-        result.append(_result)
+        print(f"Code will be write {profile_id}")
+        with open(f"./code_result/cnwqk{profile_id}.py", "w", encoding="utf-8") as f:
+            f.write(code)
 
-    with open("./output.jsonl", "w", encoding="utf-8") as f:
-        for result in result:
-            f.write(json.dumps(result) + "\n")
+    print("1: Succeed for generate code !")
+    # covert
+    test_json_a = json.loads(open("./testA.json", "r", encoding="utf-8").read())
+    entry = test_json_a["entry"]
+    result = {
+        "resourceType": "Bundle",
+        "type": "message",
+        "total": 18,
+    }
+
+    covert_entry = []
+    for meta in entry:
+        resource = meta["resource"]
+        print(resource)
+        resource["id"] = str(uuid.uuid4())
+        resourceType = resource["resourceType"]
+        if resourceType == "MessageHeader":
+            covert_entry.append({"resource": resource})
+            continue
+
+        content = resource["content"]
+        title = content[0]["title"]
+        meta_content = open(f"./code_result/{title}.py", "r", encoding="utf-8").read()
+        base64_content = base64_encode(meta_content)
+        content[0]["data"] = base64_content
+        resource["content"] = content
+        covert_entry.append({"resource": resource})
+
+    result["entry"] = covert_entry
+    with open("result.json", "w", encoding="utf-8") as f:
+        f.write(json.dumps(result, indent=4))
+    print("2: Succeed for generate submit !")
