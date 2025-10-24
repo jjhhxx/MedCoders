@@ -1,0 +1,435 @@
+{
+  "resourceType": "Bundle",
+  "type": "message",
+  "total": 18,
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "MessageHeader",
+        "id": "47043fce-37d4-4444-92b8-930110c0cca5",
+        "text": {
+          "status": "generated",
+          "div": "<div>This message is a request for the execution of the NLP codes and the evaluaion.</div>"
+        },
+        "eventCoding": {
+          "system": "chip2025.cn.medcodegpt.www",
+          "code": "library-publish",
+          "display": "library-publish"
+        },
+        "source": {
+          "name": "MedCoder",
+          "software": "CNWQK",
+          "version": "1.0"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "57804ed7-515f-490e-8bac-34b4b197a55f",
+        "name": "cnwqk485",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk485"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "3f1d16a9-f198-406e-97e7-110778d525ad",
+        "name": "cnwqk895",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk895"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "db47062a-0c18-43d2-bf4e-cc99265fa1e9",
+        "name": "cnwqk615",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk615"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "991c6941-e47e-40c3-b403-b2a6cb9257f1",
+        "name": "cnwqk265",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk265"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "1e985197-0762-4558-8c0b-a9e96f59791b",
+        "name": "cnwqk635",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk635"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "0cc07e50-a959-4aca-b4c1-f55894c38e55",
+        "name": "cnwqk675",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk675"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "108ffe7b-884e-442e-bcf9-47abddde755b",
+        "name": "cnwqk735",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk735"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "649982ee-f6e8-4593-9478-d317d421bc4c",
+        "name": "cnwqk745",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk745"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "064c0793-bdac-498d-bb26-fa6167519db6",
+        "name": "cnwqk755",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk755"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "ceb427f5-a766-40a7-8d35-c819026e1bd1",
+        "name": "cnwqk855",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk855"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "b916c047-ec00-4a74-afd4-8de2064ea061",
+        "name": "cnwqk835",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk835"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "e8fb6b42-3b8a-46ba-b0ff-907a2ed07b47",
+        "name": "cnwqk875",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk875"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "b7c9bcd6-db21-4157-9f70-8668b82808aa",
+        "name": "cnwqk805",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk805"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "bf90e56c-d5eb-4932-96cb-ac656b5d430a",
+        "name": "cnwqk565",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk565"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "d5348681-50b4-4341-ab0d-4cbb6568a220",
+        "name": "cnwqk555",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk555"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "efd16c14-8728-4895-a16b-3c2374892372",
+        "name": "cnwqk185",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk185"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Library",
+        "id": "adf16829-44cf-49e8-9b24-e30cea69a357",
+        "name": "cnwqk165",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/library-type",
+              "code": "logic-library",
+              "display": "Logic Library"
+            }
+          ]
+        },
+        "content": [
+          {
+            "contentType": "text/x-python",
+            "data": "",
+            "title": "cnwqk165"
+          }
+        ]
+      }
+    }
+  ]
+}
