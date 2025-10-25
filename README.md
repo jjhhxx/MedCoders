@@ -1,5 +1,5 @@
 # MedCoders
-Repository for CIPS 2025 eval3
+Repository for xx
 
 ## 注意事项
 - 在执行时你需要删除 code_resault 目录下的文件，对于目录下已经存在的文件，coding_with_question 回跳过该 profile
